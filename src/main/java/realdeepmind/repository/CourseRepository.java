@@ -13,11 +13,11 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 
     boolean existsByCourseCode(String courseCode);
 
-    List<Course> findByTeacherId(Long teacherId);
+    List<Course> findByTeacher_Id(Long teacherId);
 
-    List<Course> findByStudentsId(Long studentsId);
+    List<Course> findByStudents_Id(Long studentsId);
 
-    List<Course> findByTeacherIdAndStudentsId(Long teacherId, Long studentsId);
+    List<Course> findByTeacher_IdAndStudents_Id(Long teacherId, Long studentsId);
 
     List<Course> findByTitleContainingIgnoreCase(String title);
 
