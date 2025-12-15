@@ -1,5 +1,6 @@
 package realdeepmind.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -7,6 +8,9 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -40,4 +44,14 @@ public class User {
     @Enumerated(EnumType.STRING)
     private UserStatus userStatus;
     private String rejectionReason;
+    @OneToMany(mappedBy = "teacher")
+    @JsonIgnore
+    @ToString.Exclude
+    @Builder.Default
+    List<Course> taughtCourses = new ArrayList<>();
+    @ManyToMany(mappedBy = "students")
+    @JsonIgnore
+    @ToString.Exclude
+    @Builder.Default
+    List<Course> attendedCourses = new ArrayList<>();
 }
