@@ -1,4 +1,5 @@
 package realdeepmind.entity;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -6,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,13 +24,13 @@ public class User {
     private String firstName;
     @NotBlank(message = "lastname cannot be empty")
     @Column(nullable = false)
-    private String lastName ;
+    private String lastName;
     @NotBlank(message = "username cannot be empty")
     @Column(nullable = false, unique = true)
-    private String username ;
+    private String username;
     @NotBlank(message = "password cannot be empty")
     @Size(min = 6, max = 20)
-    private String password ;
+    private String password;
     @NotNull(message = "role cannot be empty")
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
