@@ -38,13 +38,4 @@ public class User {
     @Enumerated(EnumType.STRING)
     private UserStatus userStatus;
     private String rejectionReason;
-
-
-
-
-
-
-
-
-
 }
