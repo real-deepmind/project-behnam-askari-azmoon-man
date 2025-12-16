@@ -1,6 +1,5 @@
-package realdeepmind.service;
+package realdeepmind.service.user;
 
-import org.springframework.stereotype.Service;
 import realdeepmind.entity.User;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;

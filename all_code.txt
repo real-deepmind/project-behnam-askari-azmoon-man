@@ -1,0 +1,336 @@
+package realdeepmind;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ProjectBehnamAskariAzmoonManApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ProjectBehnamAskariAzmoonManApplication.class, args);
+    }
+
+}
+package realdeepmind.entity;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@Entity
+@Table(name = "courses")
+public class Course {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
+    private Long id;
+    @NotBlank(message = "title cannot be empty")
+    @Column(nullable = false)
+    private String title;
+    @NotBlank(message = "courseCode cannot be empty")
+    @Column(nullable = false, unique = true)
+    private String courseCode;
+    @NotNull(message = "start date cannot be null")
+    private LocalDate startDate;
+    @NotNull(message = "end date cannot be null")
+    private LocalDate endDate;
+    private Integer duration;
+    @ManyToOne
+    @JoinColumn(name = "teacher_id")
+    private User teacher;
+    @ManyToMany
+    @JoinTable(
+            name = "course_students",
+            joinColumns = @JoinColumn(name = "course_id"),
+            inverseJoinColumns = @JoinColumn(name = "student_id")
+    )
+    @Builder.Default
+    private List<User> students = new ArrayList<>();
+
+}
+package realdeepmind.entity;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.*;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @NotBlank(message = "firstname cannot be empty")
+    @Column(nullable = false)
+    private String firstName;
+    @NotBlank(message = "lastname cannot be empty")
+    @Column(nullable = false)
+    private String lastName;
+    @NotBlank(message = "username cannot be empty")
+    @Column(nullable = false, unique = true)
+    private String username;
+    @NotBlank(message = "password cannot be empty")
+    @Size(min = 6, max = 20)
+    private String password;
+    @NotNull(message = "role cannot be empty")
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private Role role;
+    @NotNull(message = "status cannot be empty")
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private UserStatus userStatus;
+    private String rejectionReason;
+    @OneToMany(mappedBy = "teacher")
+    @JsonIgnore
+    @ToString.Exclude
+    @Builder.Default
+    List<Course> taughtCourses = new ArrayList<>();
+    @ManyToMany(mappedBy = "students")
+    @JsonIgnore
+    @ToString.Exclude
+    @Builder.Default
+    List<Course> attendedCourses = new ArrayList<>();
+}
+package realdeepmind.entity.enums;
+
+public enum Role {
+    ADMIN,
+    TEACHER,
+    STUDENT
+}
+package realdeepmind.entity.enums;
+
+public enum UserStatus {
+    WAITING,
+    APPROVED,
+    REJECTED
+}
+package realdeepmind.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import realdeepmind.entity.Course;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+@Repository
+public interface CourseRepository extends JpaRepository<Course, Long> {
+    Optional<Course> findByCourseCode(String courseCode);
+
+    boolean existsByCourseCode(String courseCode);
+
+    List<Course> findByTeacher_Id(Long teacherId);
+
+    List<Course> findByStudents_Id(Long studentsId);
+
+    List<Course> findByTeacher_IdAndStudents_Id(Long teacherId, Long studentsId);
+
+    List<Course> findByTitleContainingIgnoreCase(String title);
+
+    List<Course> findByStartDateAfter(LocalDate startDate);
+
+    List<Course> findByEndDateBefore(LocalDate endDate);
+
+    List<Course> findByStartDateLessThanEqualAndEndDateGreaterThanEqual(LocalDate startDate, LocalDate endDate);
+
+    List<Course> findByDurationGreaterThan(Integer duration);
+
+    List<Course> findByDurationLessThan(Integer duration);
+
+
+}
+package realdeepmind.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import realdeepmind.entity.User;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+
+    boolean existsByUsername(String username);
+
+    List<User> findByAttendedCourses_Id(Long attendedCoursesId);
+
+    Optional<User> findByTaughtCourses_Id(Long taughtCoursesId);
+
+    List<User> findByUserStatus(UserStatus userStatus);
+
+    List<User> findByRole(Role role);
+
+    List<User> findByRoleAndUserStatus(Role role, UserStatus userStatus);
+
+}
+package realdeepmind.service.user;
+
+import realdeepmind.entity.User;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+
+import java.util.List;
+import java.util.Optional;
+
+
+public interface UserService {
+    User save(User user);
+
+    Optional<User> login(String username, String password);
+
+    void verifyUser(Long userId);
+
+    void rejectUser(Long userId, String rejectionReason);
+
+    User update(User user);
+
+    void delete(Long id);
+
+    boolean existsByUsername(String username);
+
+    User findById(Long id);
+
+    User findByUsername(String username);
+
+    List<User> findAllUsers();
+
+    List<User> findUsersByRole(Role role);
+
+    List<User> findUsersByStatus(UserStatus status);
+
+    List<User> findUsersByRoleAndStatus(Role role, UserStatus status);
+
+    List<User> findStudentsOfCourse(Long courseId);
+
+    User findTeacherOfCourse(Long courseId);
+
+}
+package realdeepmind.service.user;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import realdeepmind.entity.User;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+import realdeepmind.repository.UserRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class UserServiceImpl implements UserService {
+    private  final UserRepository userRepository;
+    @Autowired
+    public UserServiceImpl(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public User save(User user) {
+        user.setUserStatus(UserStatus.WAITING);
+       return userRepository.save(user);
+    }
+
+    @Override
+    public Optional<User> login(String username, String password) {
+       User user=userRepository.findByUsername(username).orElseThrow(()-> new);
+
+        else
+        return Optional.empty();
+    }
+
+    @Override
+    public void verifyUser(Long userId) {
+
+    }
+
+    @Override
+    public void rejectUser(Long userId, String rejectionReason) {
+
+    }
+
+    @Override
+    public User update(User user) {
+        return null;
+    }
+
+    @Override
+    public void delete(Long id) {
+
+    }
+
+    @Override
+    public boolean existsByUsername(String username) {
+        return false;
+    }
+
+    @Override
+    public User findById(Long id) {
+        return null;
+    }
+
+    @Override
+    public User findByUsername(String username) {
+        return null;
+    }
+
+    @Override
+    public List<User> findAllUsers() {
+        return List.of();
+    }
+
+    @Override
+    public List<User> findUsersByRole(Role role) {
+        return List.of();
+    }
+
+    @Override
+    public List<User> findUsersByStatus(UserStatus status) {
+        return List.of();
+    }
+
+    @Override
+    public List<User> findUsersByRoleAndStatus(Role role, UserStatus status) {
+        return List.of();
+    }
+
+    @Override
+    public List<User> findStudentsOfCourse(Long courseId) {
+        return List.of();
+    }
+
+    @Override
+    public User findTeacherOfCourse(Long courseId) {
+        return null;
+    }
+}
