@@ -15,10 +15,10 @@ public class CourseEnrollment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne
+    @ManyToOne(optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
-    @ManyToOne
+    @ManyToOne(optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
     @Enumerated(EnumType.STRING)

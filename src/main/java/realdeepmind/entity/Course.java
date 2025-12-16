@@ -1,5 +1,6 @@
 package realdeepmind.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,16 +33,10 @@ public class Course {
     @NotNull(message = "end date cannot be null")
     private LocalDate endDate;
     private Integer duration;
-    @ManyToOne
-    @JoinColumn(name = "teacher_id")
-    private User teacher;
-    @ManyToMany
-    @JoinTable(
-            name = "course_students",
-            joinColumns = @JoinColumn(name = "course_id"),
-            inverseJoinColumns = @JoinColumn(name = "student_id")
-    )
+    @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    @ToString.Exclude
     @Builder.Default
-    private List<User> students = new ArrayList<>();
+    private List<CourseEnrollment> enrollments = new ArrayList<>();
 
 }

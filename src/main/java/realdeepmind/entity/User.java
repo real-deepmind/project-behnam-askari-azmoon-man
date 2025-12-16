@@ -44,14 +44,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     private UserStatus userStatus;
     private String rejectionReason;
-    @OneToMany(mappedBy = "teacher")
+    @OneToMany(mappedBy = "user")
     @JsonIgnore
     @ToString.Exclude
     @Builder.Default
-    List<Course> taughtCourses = new ArrayList<>();
-    @ManyToMany(mappedBy = "students")
-    @JsonIgnore
-    @ToString.Exclude
-    @Builder.Default
-    List<Course> attendedCourses = new ArrayList<>();
+    private List<CourseEnrollment> enrollments = new ArrayList<>();
 }
