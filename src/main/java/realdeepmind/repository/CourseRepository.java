@@ -24,8 +24,12 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
                     "INNER JOIN course_enrollments ce ON c.id = ce.course_id " +
                     "WHERE ce.user_id = :userId AND ce.role_in_course = 'STUDENT'",
             nativeQuery = true
+
     )
     List<Course> findCoursesByStudentId(@Param("userId") Long userId);
+
+    @Query("SELECT c FROM Course c LEFT JOIN c.enrollments e WHERE e.id IS NULL")
+    List<Course> findCoursesWithNoEnrollments();
 
     List<Course> findByTitleContainingIgnoreCase(String title);
 
