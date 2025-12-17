@@ -2,6 +2,7 @@ package realdeepmind.service.user;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.User;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;
@@ -12,6 +13,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;

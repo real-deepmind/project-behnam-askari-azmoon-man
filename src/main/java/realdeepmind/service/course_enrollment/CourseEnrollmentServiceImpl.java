@@ -2,6 +2,7 @@ package realdeepmind.service.course_enrollment;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.Course;
 import realdeepmind.entity.CourseEnrollment;
 import realdeepmind.entity.User;
@@ -16,6 +17,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
 
     private final CourseEnrollmentRepository enrollmentRepository;
