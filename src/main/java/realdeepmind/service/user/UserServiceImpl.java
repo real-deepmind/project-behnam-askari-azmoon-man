@@ -118,5 +118,23 @@ public class UserServiceImpl implements UserService {
         return userRepository.searchUsers(firstName, lastName, role, status);
     }
 
+    @Override
+    public void changeUserStatus(Long userId, UserStatus newStatus) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setUserStatus(newStatus);
+        userRepository.save(user);
+    }
+
+    @Override
+    public void changeUserRole(Long userId, Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setRole(newRole);
+        userRepository.save(user);
+    }
+
 
 }

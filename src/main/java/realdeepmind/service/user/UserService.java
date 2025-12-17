@@ -41,5 +41,9 @@ public interface UserService {
 
     List<User> searchUsers(String firstName, String lastName, Role role, UserStatus status);
 
+    void changeUserStatus(Long userId, UserStatus newStatus);
+
+    public void changeUserRole(Long userId, Role newRole);
+
 
 }

@@ -2,7 +2,10 @@ package realdeepmind.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import realdeepmind.entity.enums.RoleInCourse;
+
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -25,6 +28,9 @@ public class CourseEnrollment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RoleInCourse roleInCourse;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime enrollmentDate;
 
 
 }

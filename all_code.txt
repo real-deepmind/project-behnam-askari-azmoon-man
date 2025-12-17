@@ -13,6 +13,7 @@ public class ProjectBehnamAskariAzmoonManApplication {
 }
 package realdeepmind.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -45,17 +46,47 @@ public class Course {
     @NotNull(message = "end date cannot be null")
     private LocalDate endDate;
     private Integer duration;
-    @ManyToOne
-    @JoinColumn(name = "teacher_id")
-    private User teacher;
-    @ManyToMany
-    @JoinTable(
-            name = "course_students",
-            joinColumns = @JoinColumn(name = "course_id"),
-            inverseJoinColumns = @JoinColumn(name = "student_id")
-    )
+    @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    @ToString.Exclude
     @Builder.Default
-    private List<User> students = new ArrayList<>();
+    private List<CourseEnrollment> enrollments = new ArrayList<>();
+
+}
+package realdeepmind.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import realdeepmind.entity.enums.RoleInCourse;
+
+import java.time.LocalDateTime;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@Entity
+@Table(name = "course_enrollments")
+public class CourseEnrollment {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "course_id", nullable = false)
+    private Course course;
+    private Double grade;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RoleInCourse roleInCourse;
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime enrollmentDate;
+
 
 }
 package realdeepmind.entity;
@@ -104,21 +135,22 @@ public class User {
     @Enumerated(EnumType.STRING)
     private UserStatus userStatus;
     private String rejectionReason;
-    @OneToMany(mappedBy = "teacher")
+    @OneToMany(mappedBy = "user")
     @JsonIgnore
     @ToString.Exclude
     @Builder.Default
-    List<Course> taughtCourses = new ArrayList<>();
-    @ManyToMany(mappedBy = "students")
-    @JsonIgnore
-    @ToString.Exclude
-    @Builder.Default
-    List<Course> attendedCourses = new ArrayList<>();
+    private List<CourseEnrollment> enrollments = new ArrayList<>();
 }
 package realdeepmind.entity.enums;
 
 public enum Role {
     ADMIN,
+    TEACHER,
+    STUDENT
+}
+package realdeepmind.entity.enums;
+
+public enum RoleInCourse {
     TEACHER,
     STUDENT
 }
@@ -132,23 +164,65 @@ public enum UserStatus {
 package realdeepmind.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import realdeepmind.entity.CourseEnrollment;
+import realdeepmind.entity.enums.RoleInCourse;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollment, Long> {
+    boolean existsByUserIdAndCourseId(Long userId, Long courseId);
+
+    Optional<CourseEnrollment> findByUserIdAndCourseId(Long userId, Long courseId);
+
+    List<CourseEnrollment> findByUserId(Long userId);
+
+    List<CourseEnrollment> findByCourseId(Long courseId);
+
+    @Query("SELECT ce FROM CourseEnrollment ce WHERE " +
+            "(:courseId IS NULL OR ce.course.id = :courseId) AND " +
+            "(:userId IS NULL OR ce.user.id = :userId) AND " +
+            "(:role IS NULL OR ce.roleInCourse = :role)")
+    List<CourseEnrollment> searchEnrollments(@Param("courseId") Long courseId,
+                                             @Param("userId") Long userId,
+                                             @Param("role") RoleInCourse role);
+}
+package realdeepmind.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import realdeepmind.entity.Course;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+
 @Repository
 public interface CourseRepository extends JpaRepository<Course, Long> {
     Optional<Course> findByCourseCode(String courseCode);
 
     boolean existsByCourseCode(String courseCode);
 
-    List<Course> findByTeacher_Id(Long teacherId);
+    @Query("SELECT c FROM Course c JOIN c.enrollments e WHERE e.user.id = :teacherId AND e.roleInCourse = 'TEACHER'")
+    List<Course> findCoursesByTeacherId(@Param("teacherId") Long teacherId);
 
-    List<Course> findByStudents_Id(Long studentsId);
+    @Query(
+            value = "SELECT c.* FROM courses c " +
+                    "INNER JOIN course_enrollments ce ON c.id = ce.course_id " +
+                    "WHERE ce.user_id = :userId AND ce.role_in_course = 'STUDENT'",
+            nativeQuery = true
 
-    List<Course> findByTeacher_IdAndStudents_Id(Long teacherId, Long studentsId);
+    )
+    List<Course> findCoursesByStudentId(@Param("userId") Long userId);
+
+    @Query("SELECT c FROM Course c LEFT JOIN c.enrollments e WHERE e.id IS NULL")
+    List<Course> findCoursesWithNoEnrollments();
 
     List<Course> findByTitleContainingIgnoreCase(String title);
 
@@ -167,6 +241,9 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 package realdeepmind.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import realdeepmind.entity.User;
 import realdeepmind.entity.enums.Role;
@@ -176,14 +253,23 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long> , JpaSpecificationExecutor<User> {
     Optional<User> findByUsername(String username);
 
     boolean existsByUsername(String username);
 
-    List<User> findByAttendedCourses_Id(Long attendedCoursesId);
+    @Query(
+            "select u from User u join u.enrollments e " +
+                    "where e.course.id = :courseId and e.roleInCourse = 'STUDENT'"
+    )
+    List<User> findStudentsByCourseId(@Param("courseId") Long courseId);
 
-    Optional<User> findByTaughtCourses_Id(Long taughtCoursesId);
+    @Query(
+            "select u from User u join u.enrollments e " +
+                    "where e.course.id = :courseId and e.roleInCourse = 'TEACHER'"
+    )
+    Optional<User> findTeacherByCourseId(@Param("courseId") Long courseId);
+
 
     List<User> findByUserStatus(UserStatus userStatus);
 
@@ -191,6 +277,292 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByRoleAndUserStatus(Role role, UserStatus userStatus);
 
+    List<User> findByFirstNameContainsIgnoreCaseAndLastNameContainingIgnoreCase(String firstName, String lastName);
+
+    @Query("SELECT u FROM User u WHERE " +
+            "(:firstName IS NULL OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', :firstName, '%'))) AND " +
+            "(:lastName IS NULL OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :lastName, '%'))) AND " +
+            "(:role IS NULL OR u.role = :role) AND " +
+            "(:status IS NULL OR u.userStatus = :status)")
+    List<User> searchUsers(@Param("firstName") String firstName,
+                           @Param("lastName") String lastName,
+                           @Param("role") Role role,
+                           @Param("status") UserStatus status);
+
+
+}
+package realdeepmind.service.course;
+
+import realdeepmind.entity.Course;
+
+import java.time.LocalDate;
+import java.util.List;
+
+public interface CourseService {
+
+    Course createCourse(Course course);
+
+    Course updateCourse(Course course);
+
+    void deleteCourse(Long id);
+
+    Course getCourseById(Long id);
+
+    Course getCourseByCode(String courseCode);
+
+    List<Course> getAllCourses();
+
+    List<Course> getCoursesByTeacher(Long teacherId);
+
+    List<Course> getCoursesByStudent(Long studentId);
+
+    List<Course> getCoursesWithNoEnrollments();
+
+    List<Course> searchByTitle(String title);
+
+    List<Course> filterByStartDateAfter(LocalDate date);
+
+    List<Course> filterByEndDateBefore(LocalDate date);
+
+    List<Course> filterByDurationGreaterThan(Integer duration);
+}
+package realdeepmind.service.course;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import realdeepmind.entity.Course;
+import realdeepmind.repository.CourseRepository;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class CourseServiceImpl implements CourseService {
+
+    private final CourseRepository courseRepository;
+
+    @Override
+    public Course createCourse(Course course) {
+        if (courseRepository.existsByCourseCode(course.getCourseCode())) {
+            throw new RuntimeException("Course code already exists: " + course.getCourseCode());
+        }
+        return courseRepository.save(course);
+    }
+
+    @Override
+    public Course updateCourse(Course course) {
+        Course existingCourse = courseRepository.findById(course.getId())
+                .orElseThrow(() -> new RuntimeException("Course not found."));
+
+        existingCourse.setTitle(course.getTitle());
+        existingCourse.setStartDate(course.getStartDate());
+        existingCourse.setEndDate(course.getEndDate());
+        existingCourse.setDuration(course.getDuration());
+
+        return courseRepository.save(existingCourse);
+    }
+
+    @Override
+    public void deleteCourse(Long id) {
+        if (!courseRepository.existsById(id)) {
+            throw new RuntimeException("Course not found.");
+        }
+        courseRepository.deleteById(id);
+    }
+
+    @Override
+    public Course getCourseById(Long id) {
+        return courseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Course not found."));
+    }
+
+    @Override
+    public Course getCourseByCode(String courseCode) {
+        return courseRepository.findByCourseCode(courseCode)
+                .orElseThrow(() -> new RuntimeException("Course not found with code: " + courseCode));
+    }
+
+    @Override
+    public List<Course> getAllCourses() {
+        return courseRepository.findAll();
+    }
+
+    @Override
+    public List<Course> getCoursesByTeacher(Long teacherId) {
+        return courseRepository.findCoursesByTeacherId(teacherId);
+    }
+
+    @Override
+    public List<Course> getCoursesByStudent(Long studentId) {
+        return courseRepository.findCoursesByStudentId(studentId);
+    }
+
+    @Override
+    public List<Course> getCoursesWithNoEnrollments() {
+        return courseRepository.findCoursesWithNoEnrollments();
+    }
+
+    @Override
+    public List<Course> searchByTitle(String title) {
+        return courseRepository.findByTitleContainingIgnoreCase(title);
+    }
+
+    @Override
+    public List<Course> filterByStartDateAfter(LocalDate date) {
+        return courseRepository.findByStartDateAfter(date);
+    }
+
+    @Override
+    public List<Course> filterByEndDateBefore(LocalDate date) {
+        return courseRepository.findByEndDateBefore(date);
+    }
+
+    @Override
+    public List<Course> filterByDurationGreaterThan(Integer duration) {
+        return courseRepository.findByDurationGreaterThan(duration);
+    }
+}
+package realdeepmind.service.course_enrollment;
+
+import realdeepmind.entity.CourseEnrollment;
+import realdeepmind.entity.enums.RoleInCourse;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface CourseEnrollmentService {
+
+
+    CourseEnrollment enroll(Long userId, Long courseId, RoleInCourse role);
+
+    CourseEnrollment assignGrade(Long userId, Long courseId, Double grade);
+
+    void unenroll(Long userId, Long courseId);
+
+
+    void deleteById(Long id);
+
+    Optional<CourseEnrollment> findById(Long id);
+
+    List<CourseEnrollment> findAll();
+
+    boolean isEnrolled(Long userId, Long courseId);
+
+    Optional<CourseEnrollment> findByUserIdAndCourseId(Long userId, Long courseId);
+
+    List<CourseEnrollment> findByUserId(Long userId);
+
+    List<CourseEnrollment> findByCourseId(Long courseId);
+
+    List<CourseEnrollment> searchEnrollments(Long courseId, Long userId, RoleInCourse role);
+}
+package realdeepmind.service.course_enrollment;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import realdeepmind.entity.Course;
+import realdeepmind.entity.CourseEnrollment;
+import realdeepmind.entity.User;
+import realdeepmind.entity.enums.RoleInCourse;
+import realdeepmind.repository.CourseEnrollmentRepository;
+import realdeepmind.repository.CourseRepository;
+import realdeepmind.repository.UserRepository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
+
+    private final CourseEnrollmentRepository enrollmentRepository;
+    private final UserRepository userRepository;
+    private final CourseRepository courseRepository;
+
+    @Override
+    public CourseEnrollment enroll(Long userId, Long courseId, RoleInCourse role) {
+        if (enrollmentRepository.existsByUserIdAndCourseId(userId, courseId)) {
+            throw new RuntimeException("User is already enrolled in this course.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found."));
+
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new RuntimeException("Course not found."));
+
+        CourseEnrollment enrollment = CourseEnrollment.builder()
+                .user(user)
+                .course(course)
+                .roleInCourse(role)
+                .enrollmentDate(LocalDateTime.now())
+                .build();
+
+        return enrollmentRepository.save(enrollment);
+    }
+
+    @Override
+    public CourseEnrollment assignGrade(Long userId, Long courseId, Double grade) {
+        CourseEnrollment enrollment = enrollmentRepository.findByUserIdAndCourseId(userId, courseId)
+                .orElseThrow(() -> new RuntimeException("Enrollment not found for this user and course."));
+
+        if (enrollment.getRoleInCourse() != RoleInCourse.STUDENT) {
+            throw new RuntimeException("Grades can only be assigned to students.");
+        }
+
+        enrollment.setGrade(grade);
+        return enrollmentRepository.save(enrollment);
+    }
+
+    @Override
+    public void unenroll(Long userId, Long courseId) {
+        CourseEnrollment enrollment = enrollmentRepository.findByUserIdAndCourseId(userId, courseId)
+                .orElseThrow(() -> new RuntimeException("Enrollment not found."));
+
+        enrollmentRepository.delete(enrollment);
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        enrollmentRepository.deleteById(id);
+    }
+
+    @Override
+    public Optional<CourseEnrollment> findById(Long id) {
+        return enrollmentRepository.findById(id);
+    }
+
+    @Override
+    public List<CourseEnrollment> findAll() {
+        return enrollmentRepository.findAll();
+    }
+
+    @Override
+    public boolean isEnrolled(Long userId, Long courseId) {
+        return enrollmentRepository.existsByUserIdAndCourseId(userId, courseId);
+    }
+
+    @Override
+    public Optional<CourseEnrollment> findByUserIdAndCourseId(Long userId, Long courseId) {
+        return enrollmentRepository.findByUserIdAndCourseId(userId, courseId);
+    }
+
+    @Override
+    public List<CourseEnrollment> findByUserId(Long userId) {
+        return enrollmentRepository.findByUserId(userId);
+    }
+
+    @Override
+    public List<CourseEnrollment> findByCourseId(Long courseId) {
+        return enrollmentRepository.findByCourseId(courseId);
+    }
+
+    @Override
+    public List<CourseEnrollment> searchEnrollments(Long courseId, Long userId, RoleInCourse role) {
+        return enrollmentRepository.searchEnrollments(courseId, userId, role);
+    }
 }
 package realdeepmind.service.user;
 
@@ -203,42 +575,44 @@ import java.util.Optional;
 
 
 public interface UserService {
-    User save(User user);
+    User signUp(User user);
 
-    Optional<User> login(String username, String password);
+    User login(String username, String password);
 
-    void verifyUser(Long userId);
+    User updateUser(User user);
 
-    void rejectUser(Long userId, String rejectionReason);
+    void changePassword(Long userId, String oldPassword, String newPassword);
 
-    User update(User user);
 
-    void delete(Long id);
+    void deleteById(Long id);
+
+    Optional<User> findById(Long id);
+
+    List<User> findAll();
+
+
+    Optional<User> findByUsername(String username);
 
     boolean existsByUsername(String username);
 
-    User findById(Long id);
+    List<User> findStudentsByCourseId(Long courseId);
 
-    User findByUsername(String username);
+    Optional<User> findTeacherByCourseId(Long courseId);
 
-    List<User> findAllUsers();
+    List<User> findByUserStatus(UserStatus userStatus);
 
-    List<User> findUsersByRole(Role role);
+    List<User> findByRole(Role role);
 
-    List<User> findUsersByStatus(UserStatus status);
+    List<User> findByRoleAndUserStatus(Role role, UserStatus userStatus);
 
-    List<User> findUsersByRoleAndStatus(Role role, UserStatus status);
+    List<User> searchUsers(String firstName, String lastName, Role role, UserStatus status);
 
-    List<User> findStudentsOfCourse(Long courseId);
-
-    User findTeacherOfCourse(Long courseId);
 
 }
 package realdeepmind.service.user;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.User;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;
@@ -248,89 +622,112 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
-    private  final UserRepository userRepository;
-    @Autowired
-    public UserServiceImpl(UserRepository userRepository) {
-        this.userRepository = userRepository;
+
+    private final UserRepository userRepository;
+
+    @Override
+    public User signUp(User user) {
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new RuntimeException("Username is already taken: " + user.getUsername());
+        }
+        if (user.getUserStatus() == null) {
+            user.setUserStatus(UserStatus.WAITING);
+        }
+        return userRepository.save(user);
     }
 
     @Override
-    public User save(User user) {
-        user.setUserStatus(UserStatus.WAITING);
-       return userRepository.save(user);
+    public User login(String username, String password) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found."));
+
+        if (!user.getPassword().equals(password)) {
+            throw new RuntimeException("Invalid password.");
+        }
+        return user;
     }
 
     @Override
-    public Optional<User> login(String username, String password) {
-       User user=userRepository.findByUsername(username).orElseThrow(()-> new);
+    public User updateUser(User user) {
+        User existingUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new RuntimeException("User not found."));
 
-        else
-        return Optional.empty();
+        existingUser.setFirstName(user.getFirstName());
+        existingUser.setLastName(user.getLastName());
+
+        return userRepository.save(existingUser);
     }
 
     @Override
-    public void verifyUser(Long userId) {
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found."));
 
+        if (!user.getPassword().equals(oldPassword)) {
+            throw new RuntimeException("Invalid old password.");
+        }
+
+        user.setPassword(newPassword);
+        userRepository.save(user);
+    }
+
+
+    @Override
+    public void deleteById(Long id) {
+        userRepository.deleteById(id);
     }
 
     @Override
-    public void rejectUser(Long userId, String rejectionReason) {
-
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
     }
 
     @Override
-    public User update(User user) {
-        return null;
+    public List<User> findAll() {
+        return userRepository.findAll();
     }
 
     @Override
-    public void delete(Long id) {
-
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 
     @Override
     public boolean existsByUsername(String username) {
-        return false;
+        return userRepository.existsByUsername(username);
     }
 
     @Override
-    public User findById(Long id) {
-        return null;
+    public List<User> findStudentsByCourseId(Long courseId) {
+        return userRepository.findStudentsByCourseId(courseId);
     }
 
     @Override
-    public User findByUsername(String username) {
-        return null;
+    public Optional<User> findTeacherByCourseId(Long courseId) {
+        return userRepository.findTeacherByCourseId(courseId);
     }
 
     @Override
-    public List<User> findAllUsers() {
-        return List.of();
+    public List<User> findByUserStatus(UserStatus userStatus) {
+        return userRepository.findByUserStatus(userStatus);
     }
 
     @Override
-    public List<User> findUsersByRole(Role role) {
-        return List.of();
+    public List<User> findByRole(Role role) {
+        return userRepository.findByRole(role);
     }
 
     @Override
-    public List<User> findUsersByStatus(UserStatus status) {
-        return List.of();
+    public List<User> findByRoleAndUserStatus(Role role, UserStatus userStatus) {
+        return userRepository.findByRoleAndUserStatus(role, userStatus);
     }
 
     @Override
-    public List<User> findUsersByRoleAndStatus(Role role, UserStatus status) {
-        return List.of();
+    public List<User> searchUsers(String firstName, String lastName, Role role, UserStatus status) {
+        return userRepository.searchUsers(firstName, lastName, role, status);
     }
 
-    @Override
-    public List<User> findStudentsOfCourse(Long courseId) {
-        return List.of();
-    }
 
-    @Override
-    public User findTeacherOfCourse(Long courseId) {
-        return null;
-    }
 }
