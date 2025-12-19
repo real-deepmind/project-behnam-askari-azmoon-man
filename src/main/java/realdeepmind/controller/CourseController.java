@@ -1,5 +1,6 @@
 package realdeepmind.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,7 +31,7 @@ public class CourseController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CourseResponseDto> createCourse(@RequestBody CourseDto courseDto) {
+    public ResponseEntity<CourseResponseDto> createCourse(@Valid @RequestBody CourseDto courseDto) {
         Course course = courseMapper.toEntity(courseDto);
         Course savedCourse = courseService.createCourse(course);
         return ResponseEntity.ok(courseMapper.toDto(savedCourse));
@@ -38,7 +39,7 @@ public class CourseController {
 
     @PostMapping("/enroll")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<EnrollmentResponseDto> enrollUser(@RequestBody EnrollmentRequestDto requestDto) {
+    public ResponseEntity<EnrollmentResponseDto> enrollUser(@Valid @RequestBody EnrollmentRequestDto requestDto) {
         CourseEnrollment enrollment = enrollmentService.enroll(
                 requestDto.getUserId(),
                 requestDto.getCourseId(),
@@ -67,7 +68,7 @@ public class CourseController {
     }
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CourseResponseDto> updateCourse(@PathVariable Long id, @RequestBody CourseDto courseDto) {
+    public ResponseEntity<CourseResponseDto> updateCourse(@PathVariable Long id,@Valid @RequestBody CourseDto courseDto) {
         Course courseToUpdate = courseMapper.toEntity(courseDto);
         courseToUpdate.setId(id);
         Course updated = courseService.updateCourse(courseToUpdate);

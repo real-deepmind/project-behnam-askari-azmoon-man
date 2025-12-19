@@ -30,36 +30,55 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
-        createUserIfNotFound("admin", "admin123", Role.ADMIN);
-        createUserIfNotFound("teacher1", "1234", Role.TEACHER);
-        createUserIfNotFound("teacher2", "1234", Role.TEACHER);
-        createUserIfNotFound("student1", "1234", Role.STUDENT);
-        createUserIfNotFound("student2", "1234", Role.STUDENT);
+        createUserIfNotFound("admin", Role.ADMIN);
+
+        createUserIfNotFound("reza", Role.TEACHER);
+        createUserIfNotFound("sara", Role.TEACHER);
+        createUserIfNotFound("mehdi", Role.TEACHER);
+        createUserIfNotFound("neda", Role.TEACHER);
+
+        createUserIfNotFound("ali", Role.STUDENT);
+        createUserIfNotFound("mina", Role.STUDENT);
+        createUserIfNotFound("hassan", Role.STUDENT);
+        createUserIfNotFound("zahra", Role.STUDENT);
+        createUserIfNotFound("kaveh", Role.STUDENT);
+        createUserIfNotFound("maryam", Role.STUDENT);
 
         createCourseIfNotFound("Java Programming", "JAVA-101");
         createCourseIfNotFound("Advanced Python", "PY-202");
+        createCourseIfNotFound("Data Structures", "CS-303");
+        createCourseIfNotFound("Database Systems", "DB-404");
 
+        enrollUserInCourse("reza", "JAVA-101", RoleInCourse.TEACHER);
+        enrollUserInCourse("ali", "JAVA-101", RoleInCourse.STUDENT);
+        enrollUserInCourse("mina", "JAVA-101", RoleInCourse.STUDENT);
 
-        enrollUserInCourse("teacher1", "JAVA-101", RoleInCourse.TEACHER);
-        enrollUserInCourse("student1", "JAVA-101", RoleInCourse.STUDENT);
-        enrollUserInCourse("student2", "JAVA-101", RoleInCourse.STUDENT);
+        enrollUserInCourse("sara", "PY-202", RoleInCourse.TEACHER);
+        enrollUserInCourse("hassan", "PY-202", RoleInCourse.STUDENT);
+        enrollUserInCourse("zahra", "PY-202", RoleInCourse.STUDENT);
+        enrollUserInCourse("ali", "PY-202", RoleInCourse.STUDENT);
 
-        enrollUserInCourse("teacher2", "PY-202", RoleInCourse.TEACHER);
-        enrollUserInCourse("student1", "PY-202", RoleInCourse.STUDENT);
+        enrollUserInCourse("mehdi", "CS-303", RoleInCourse.TEACHER);
+        enrollUserInCourse("kaveh", "CS-303", RoleInCourse.STUDENT);
+        enrollUserInCourse("maryam", "CS-303", RoleInCourse.STUDENT);
+
+        enrollUserInCourse("neda", "DB-404", RoleInCourse.TEACHER);
+        enrollUserInCourse("mina", "DB-404", RoleInCourse.STUDENT);
+        enrollUserInCourse("hassan", "DB-404", RoleInCourse.STUDENT);
     }
 
-    private void createUserIfNotFound(String username, String rawPassword, Role role) {
+    private void createUserIfNotFound(String username, Role role) {
         if (!userRepository.existsByUsername(username)) {
             User user = User.builder()
-                    .firstName(role.name().substring(0, 1) + role.name().toLowerCase().substring(1))
+                    .firstName(username)
                     .lastName("Test")
                     .username(username)
-                    .password(passwordEncoder.encode(rawPassword))
+                    .password(passwordEncoder.encode("123456"))
                     .role(role)
                     .userStatus(UserStatus.APPROVED)
                     .build();
             userRepository.save(user);
-            System.out.println("User created: " + username);
+            System.out.println(" User created: " + username);
         }
     }
 
@@ -92,7 +111,7 @@ public class DataInitializer implements CommandLineRunner {
                         .roleInCourse(roleInCourse)
                         .build();
                 enrollmentRepository.save(enrollment);
-                System.out.println("Enrolled: " + username + " in " + courseCode + " as " + roleInCourse);
+                System.out.println(" Enrolled: " + username + " in " + courseCode);
             }
         }
     }

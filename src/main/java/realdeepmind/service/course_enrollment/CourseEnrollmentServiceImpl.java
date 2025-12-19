@@ -24,6 +24,7 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
     private final UserRepository userRepository;
     private final CourseRepository courseRepository;
 
+    @Transactional
     @Override
     public CourseEnrollment enroll(Long userId, Long courseId, RoleInCourse role) {
         if (enrollmentRepository.existsByUserIdAndCourseId(userId, courseId)) {
@@ -52,6 +53,7 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
         return enrollmentRepository.save(enrollment);
     }
 
+    @Transactional
     @Override
     public CourseEnrollment assignGrade(Long userId, Long courseId, Double grade) {
         CourseEnrollment enrollment = enrollmentRepository.findByUserIdAndCourseId(userId, courseId)
@@ -65,6 +67,7 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
         return enrollmentRepository.save(enrollment);
     }
 
+    @Transactional
     @Override
     public void unenroll(Long userId, Long courseId) {
         CourseEnrollment enrollment = enrollmentRepository.findByUserIdAndCourseId(userId, courseId)
@@ -73,6 +76,7 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
         enrollmentRepository.delete(enrollment);
     }
 
+    @Transactional
     @Override
     public void deleteById(Long id) {
         enrollmentRepository.deleteById(id);

@@ -17,6 +17,7 @@ public class CourseServiceImpl implements CourseService {
     private final CourseRepository courseRepository;
 
     @Override
+    @Transactional
     public Course createCourse(Course course) {
         if (courseRepository.existsByCourseCode(course.getCourseCode())) {
             throw new RuntimeException("Course code already exists: " + course.getCourseCode());
@@ -25,6 +26,7 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
+    @Transactional
     public Course updateCourse(Course course) {
         Course existingCourse = courseRepository.findById(course.getId())
                 .orElseThrow(() -> new RuntimeException("Course not found."));
@@ -38,6 +40,7 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
+    @Transactional
     public void deleteCourse(Long id) {
         if (!courseRepository.existsById(id)) {
             throw new RuntimeException("Course not found.");
