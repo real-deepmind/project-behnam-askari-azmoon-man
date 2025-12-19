@@ -11,6 +11,379 @@ public class ProjectBehnamAskariAzmoonManApplication {
     }
 
 }
+package realdeepmind.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import realdeepmind.dto.LoginDto;
+import realdeepmind.dto.user.UserRegisterDto;
+import realdeepmind.entity.User;
+import realdeepmind.mapper.UserMapper;
+import realdeepmind.security.JwtUtils;
+import realdeepmind.service.user.UserService;
+
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthRestController {
+
+    private final AuthenticationManager authenticationManager;
+    private final UserService userService;
+    private final UserMapper userMapper;
+    private final JwtUtils jwtUtils;
+    private final UserDetailsService userDetailsService;
+
+    // ثبت‌نام کاربر جدید
+    @PostMapping("/register")
+    public ResponseEntity<String> register(@RequestBody UserRegisterDto registerDto) {
+        User user = userMapper.toEntity(registerDto);
+        userService.signUp(user);
+        return ResponseEntity.ok("User registered successfully! Please wait for admin approval.");
+    }
+
+    // ورود و دریافت توکن
+    @PostMapping("/login")
+    public ResponseEntity<String> login(@RequestBody LoginDto loginDto) {
+        // ۱. احراز هویت (چک کردن یوزرنیم و پسورد)
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword())
+        );
+
+        // ۲. بارگذاری اطلاعات کاربر برای ساخت توکن
+        final UserDetails userDetails = userDetailsService.loadUserByUsername(loginDto.getUsername());
+
+        // ۳. تولید توکن
+        String token = jwtUtils.generateToken(userDetails);
+
+        return ResponseEntity.ok(token);
+    }
+}
+package realdeepmind.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import realdeepmind.dto.course.CourseDto;
+import realdeepmind.dto.course.CourseResponseDto;
+import realdeepmind.dto.course_enrollment.EnrollmentRequestDto;
+import realdeepmind.dto.course_enrollment.EnrollmentResponseDto;
+import realdeepmind.entity.Course;
+import realdeepmind.entity.CourseEnrollment;
+import realdeepmind.mapper.CourseEnrollmentMapper;
+import realdeepmind.mapper.CourseMapper;
+import realdeepmind.service.course.CourseService;
+import realdeepmind.service.course_enrollment.CourseEnrollmentService;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/courses")
+@RequiredArgsConstructor
+public class CourseController {
+
+    private final CourseService courseService;
+    private final CourseEnrollmentService enrollmentService;
+    private final CourseMapper courseMapper;
+    private final CourseEnrollmentMapper enrollmentMapper;
+
+    // ۱. ایجاد دوره جدید (فقط ادمین)
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CourseResponseDto> createCourse(@RequestBody CourseDto courseDto) {
+        Course course = courseMapper.toEntity(courseDto);
+        Course savedCourse = courseService.createCourse(course);
+        return ResponseEntity.ok(courseMapper.toDto(savedCourse));
+    }
+
+    // ۲. ثبت‌نام کاربر (استاد یا دانشجو) در دوره (فقط ادمین)
+    @PostMapping("/enroll")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<EnrollmentResponseDto> enrollUser(@RequestBody EnrollmentRequestDto requestDto) {
+        CourseEnrollment enrollment = enrollmentService.enroll(
+                requestDto.getUserId(),
+                requestDto.getCourseId(),
+                requestDto.getRole()
+        );
+        return ResponseEntity.ok(enrollmentMapper.toDto(enrollment));
+    }
+
+    // ۳. مشاهده لیست همه دوره‌ها (برای همه کاربران لاگین شده)
+    @GetMapping
+    public ResponseEntity<List<CourseResponseDto>> getAllCourses() {
+        List<Course> courses = courseService.getAllCourses();
+        List<CourseResponseDto> dtos = courses.stream()
+                .map(courseMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+
+    // ۴. مشاهده لیست افراد حاضر در یک کلاس خاص (فقط ادمین و استاد)
+    @GetMapping("/{courseId}/users")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<List<EnrollmentResponseDto>> getCourseUsers(@PathVariable Long courseId) {
+        List<CourseEnrollment> enrollments = enrollmentService.findByCourseId(courseId);
+        List<EnrollmentResponseDto> dtos = enrollments.stream()
+                .map(enrollmentMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+}
+package realdeepmind.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import realdeepmind.dto.user.UserRegisterDto;
+import realdeepmind.dto.user.UserResponseDto;
+import realdeepmind.entity.User;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+import realdeepmind.mapper.UserMapper;
+import realdeepmind.repository.UserRepository;
+import realdeepmind.service.user.UserService;
+
+import java.security.Principal;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/users")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserService userService;
+    private final UserMapper userMapper;
+
+    // ۱. لیست کاربران در انتظار تایید (فقط مدیر)
+    @GetMapping("/waiting")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<UserResponseDto>> getWaitingUsers() {
+        List<User> users = userService.findByUserStatus(UserStatus.WAITING);
+        return ResponseEntity.ok(users.stream().map(userMapper::toDto).collect(Collectors.toList()));
+    }
+
+    // ۲. تایید یا رد کاربر (تغییر وضعیت) - فقط مدیر
+    @PutMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> changeStatus(@PathVariable Long id, @RequestParam UserStatus status) {
+        userService.changeUserStatus(id, status);
+        return ResponseEntity.ok("User status updated to " + status);
+    }
+
+    // ۳. ویرایش اطلاعات کاربر (نام و نام خانوادگی) - فقط مدیر
+    // طبق مستندات مدیر می‌تواند اطلاعات کاربران را ویرایش کند
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserResponseDto> updateUser(@PathVariable Long id, @RequestBody UserRegisterDto userDto) {
+        // تبدیل DTO به Entity
+        User userUpdateInfo = userMapper.toEntity(userDto);
+        userUpdateInfo.setId(id); // تنظیم ID برای اینکه سرویس بفهمد کدام کاربر است
+
+        User updatedUser = userService.updateUser(userUpdateInfo);
+        return ResponseEntity.ok(userMapper.toDto(updatedUser));
+    }
+
+    // ۴. تغییر نقش کاربر (مثلاً دانشجو به استاد) - فقط مدیر
+    @PutMapping("/{id}/role")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> changeRole(@PathVariable Long id, @RequestParam Role role) {
+        userService.changeUserRole(id, role);
+        return ResponseEntity.ok("User role updated to " + role);
+    }
+
+    // ۵. جستجو و فیلتر کاربران
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<UserResponseDto>> searchUsers(
+            @RequestParam(required = false) String firstName,
+            @RequestParam(required = false) String lastName,
+            @RequestParam(required = false) Role role,
+            @RequestParam(required = false) UserStatus status
+    ) {
+        List<User> users = userService.searchUsers(firstName, lastName, role, status);
+        return ResponseEntity.ok(users.stream().map(userMapper::toDto).collect(Collectors.toList()));
+    }
+    // ۶. ویرایش پروفایل شخصی (برای هر کاربر لاگین شده)
+    @PutMapping("/profile")
+    public ResponseEntity<UserResponseDto> updateMyProfile(
+            @RequestBody UserRegisterDto userDto,
+            Principal principal // این آبجکت اطلاعات کاربری که الان لاگین هست را دارد
+    ) {
+        // ۱. پیدا کردن کاربری که درخواست داده (از طریق نام کاربری داخل توکن)
+        String currentUsername = principal.getName();
+        User currentUser = userService.findByUsername(currentUsername)
+                .orElseThrow(() -> new RuntimeException("Current user not found"));
+
+        // ۲. فقط فیلدهای مجاز را آپدیت می‌کنیم
+        // نکته: اجازه نمی‌دهیم کاربر نقش یا وضعیت خود را تغییر دهد!
+        currentUser.setFirstName(userDto.getFirstName());
+        currentUser.setLastName(userDto.getLastName());
+
+        // اگر خواستی کاربر بتواند پسوردش را هم عوض کند، منطقش جداست (در ادامه می‌گویم)
+
+        // ۳. ذخیره تغییرات
+        User updatedUser = userService.updateUser(currentUser);
+
+        return ResponseEntity.ok(userMapper.toDto(updatedUser));
+    }
+}
+package realdeepmind.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+@Data
+public class LoginDto {
+    @NotBlank
+    private String username;
+
+    @NotBlank
+    private String password;
+}
+package realdeepmind.dto.course;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDate;
+
+@Data
+@Builder
+public class CourseDto {
+    @NotBlank
+    private String title;
+
+    @NotBlank
+    private String courseCode;
+
+    @NotNull
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate startDate;
+
+    @NotNull
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate endDate;
+}
+package realdeepmind.dto.course;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDate;
+
+@Data
+@Builder
+public class CourseResponseDto {
+    private Long id;
+    private String title;
+    private String courseCode;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private Integer duration;
+}
+package realdeepmind.dto.course_enrollment;
+
+import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import realdeepmind.entity.enums.RoleInCourse;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class EnrollmentRequestDto {
+    @NotNull(message = "User ID is required")
+    private Long userId;
+
+    @NotNull(message = "Course ID is required")
+    private Long courseId;
+
+    @NotNull(message = "Role in course is required")
+    private RoleInCourse role;
+}
+package realdeepmind.dto.course_enrollment;
+
+import lombok.Builder;
+import lombok.Data;
+import realdeepmind.entity.enums.RoleInCourse;
+
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+public class EnrollmentResponseDto {
+    private Long id;
+    private Long userId;
+    private String userFullName;
+    private String username;
+
+    private Long courseId;
+    private String courseTitle;
+
+    private RoleInCourse role;
+    private Double grade;
+    private LocalDateTime enrollmentDate;
+}
+package realdeepmind.dto.user;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Builder;
+import lombok.Data;
+import realdeepmind.entity.enums.Role;
+
+@Data
+@Builder
+public class UserRegisterDto {
+    @NotBlank(message = "First name is required")
+    private String firstName;
+
+    @NotBlank(message = "Last name is required")
+    private String lastName;
+
+    @NotBlank(message = "Username is required")
+    private String username;
+
+    @NotBlank(message = "Password is required")
+    @Size(min = 6, max = 20, message = "Password must be between 6 and 20 characters")
+    private String password;
+
+    private Role role;
+}
+package realdeepmind.dto.user;
+
+import lombok.Builder;
+import lombok.Data;
+import realdeepmind.entity.enums.Role;
+import realdeepmind.entity.enums.UserStatus;
+
+@Data
+@Builder
+public class UserResponseDto {
+    private Long id;
+    private String firstName;
+    private String lastName;
+    private String username;
+    private Role role;
+    private UserStatus status;
+}
 package realdeepmind.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -161,6 +534,118 @@ public enum UserStatus {
     APPROVED,
     REJECTED
 }
+package realdeepmind.mapper;
+
+import org.springframework.stereotype.Component;
+import realdeepmind.dto.course_enrollment.EnrollmentResponseDto;
+import realdeepmind.entity.CourseEnrollment;
+
+@Component
+public class CourseEnrollmentMapper {
+
+    public EnrollmentResponseDto toDto(CourseEnrollment enrollment) {
+        if (enrollment == null) {
+            return null;
+        }
+
+        return EnrollmentResponseDto.builder()
+                .id(enrollment.getId())
+                .userId(enrollment.getUser().getId())
+                .userFullName(enrollment.getUser().getFirstName() + " " + enrollment.getUser().getLastName())
+                .username(enrollment.getUser().getUsername())
+                .courseId(enrollment.getCourse().getId())
+                .courseTitle(enrollment.getCourse().getTitle())
+                .role(enrollment.getRoleInCourse())
+                .grade(enrollment.getGrade())
+                .enrollmentDate(enrollment.getEnrollmentDate())
+                .build();
+    }
+}
+package realdeepmind.mapper;
+
+import org.springframework.stereotype.Component;
+import realdeepmind.dto.course.CourseDto;
+import realdeepmind.dto.course.CourseResponseDto;
+import realdeepmind.entity.Course;
+
+import java.time.temporal.ChronoUnit;
+
+@Component
+public class CourseMapper {
+
+    public Course toEntity(CourseDto dto) {
+        if (dto == null) {
+            return null;
+        }
+
+        Course.CourseBuilder courseBuilder = Course.builder()
+                .title(dto.getTitle())
+                .courseCode(dto.getCourseCode())
+                .startDate(dto.getStartDate())
+                .endDate(dto.getEndDate());
+
+        if (dto.getStartDate() != null && dto.getEndDate() != null) {
+            long days = ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate());
+            courseBuilder.duration((int) days);
+        }
+
+        return courseBuilder.build();
+    }
+
+    public CourseResponseDto toDto(Course course) {
+        if (course == null) {
+            return null;
+        }
+
+        return CourseResponseDto.builder()
+                .id(course.getId())
+                .title(course.getTitle())
+                .courseCode(course.getCourseCode())
+                .startDate(course.getStartDate())
+                .endDate(course.getEndDate())
+                .duration(course.getDuration())
+                .build();
+    }
+}
+package realdeepmind.mapper;
+
+import org.springframework.stereotype.Component;
+import realdeepmind.dto.user.UserRegisterDto;
+import realdeepmind.dto.user.UserResponseDto;
+import realdeepmind.entity.User;
+
+@Component
+public class UserMapper {
+
+    public User toEntity(UserRegisterDto dto) {
+        if (dto == null) {
+            return null;
+        }
+
+        return User.builder()
+                .firstName(dto.getFirstName())
+                .lastName(dto.getLastName())
+                .username(dto.getUsername())
+                .password(dto.getPassword())
+                .role(dto.getRole())
+                .build();
+    }
+
+    public UserResponseDto toDto(User user) {
+        if (user == null) {
+            return null;
+        }
+
+        return UserResponseDto.builder()
+                .id(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .username(user.getUsername())
+                .role(user.getRole())
+                .status(user.getUserStatus())
+                .build();
+    }
+}
 package realdeepmind.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -291,6 +776,304 @@ public interface UserRepository extends JpaRepository<User, Long> , JpaSpecifica
 
 
 }
+package realdeepmind.security;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import realdeepmind.entity.User;
+import realdeepmind.repository.UserRepository;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+public class CustomUserDetails implements UserDetails {
+    private final User user;
+
+    public CustomUserDetails(User user) {
+        this.user = user;
+    }
+
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_"+user.getRole().name()));
+    }
+
+    @Override
+    public String getPassword() {
+        return user.getPassword();
+    }
+
+    @Override
+    public String getUsername() {
+        return user.getUsername();
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+
+    public User getUser() {
+        return user;
+    }
+}
+package realdeepmind.security;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+@RequiredArgsConstructor
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private final JwtUtils jwtUtils;
+    private final UserDetailsService userDetailsService;
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        final String authHeader = request.getHeader("Authorization");
+        final String jwtToken;
+        final String username;
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        jwtToken = authHeader.substring(7);
+
+        username = jwtUtils.extractUsername(jwtToken);
+
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+
+            if (jwtUtils.isTokenValid(jwtToken, userDetails)) {
+
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        userDetails.getAuthorities()
+                );
+
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+package realdeepmind.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+
+import java.security.Key;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+@Component
+public class JwtUtils {
+
+
+    private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        return generateToken(new HashMap<>(), userDetails);
+    }
+
+    public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
+        return Jwts
+                .builder()
+                .setClaims(extraClaims)
+                .setSubject(userDetails.getUsername())
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
+                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public boolean isTokenValid(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+    }
+
+    private boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    private Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts
+                .parserBuilder()
+                .setSigningKey(getSignInKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    private Key getSignInKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+}
+package realdeepmind.security;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.NoOpPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity // فعال‌سازی @PreAuthorize برای چک کردن نقش‌ها در آینده
+@RequiredArgsConstructor
+public class SecurityConfiguration {
+
+    private final JwtAuthFilter jwtAuthFilter;
+    private final UserDetailsService userDetailsService;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        .anyRequest().authenticated()
+                )
+
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                .authenticationProvider(authenticationProvider())
+
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+
+        authProvider.setUserDetailsService(userDetailsService);
+
+        authProvider.setPasswordEncoder(passwordEncoder());
+
+        return authProvider;
+    }
+
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+        //return NoOpPasswordEncoder.getInstance();
+    }
+}
+package realdeepmind.security;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import realdeepmind.entity.User;
+import realdeepmind.repository.UserRepository;
+
+@Service
+@RequiredArgsConstructor
+public class UserDetailsServiceImpl implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+
+        return new CustomUserDetails(user);
+    }
+}
 package realdeepmind.service.course;
 
 import realdeepmind.entity.Course;
@@ -330,6 +1113,7 @@ package realdeepmind.service.course;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.Course;
 import realdeepmind.repository.CourseRepository;
 
@@ -338,6 +1122,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class CourseServiceImpl implements CourseService {
 
     private final CourseRepository courseRepository;
@@ -461,6 +1246,7 @@ package realdeepmind.service.course_enrollment;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.Course;
 import realdeepmind.entity.CourseEnrollment;
 import realdeepmind.entity.User;
@@ -475,6 +1261,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
 
     private final CourseEnrollmentRepository enrollmentRepository;
@@ -485,6 +1272,12 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
     public CourseEnrollment enroll(Long userId, Long courseId, RoleInCourse role) {
         if (enrollmentRepository.existsByUserIdAndCourseId(userId, courseId)) {
             throw new RuntimeException("User is already enrolled in this course.");
+        }
+
+        if (role == RoleInCourse.TEACHER) {
+            if (userRepository.findTeacherByCourseId(courseId).isPresent()) {
+                throw new RuntimeException("Error: This course already has a teacher.");
+            }
         }
 
         User user = userRepository.findById(userId)
@@ -577,7 +1370,6 @@ import java.util.Optional;
 public interface UserService {
     User signUp(User user);
 
-    User login(String username, String password);
 
     User updateUser(User user);
 
@@ -607,12 +1399,18 @@ public interface UserService {
 
     List<User> searchUsers(String firstName, String lastName, Role role, UserStatus status);
 
+    void changeUserStatus(Long userId, UserStatus newStatus);
+
+    public void changeUserRole(Long userId, Role newRole);
+
 
 }
 package realdeepmind.service.user;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.User;
 import realdeepmind.entity.enums.Role;
 import realdeepmind.entity.enums.UserStatus;
@@ -623,11 +1421,14 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
+    @Transactional
     public User signUp(User user) {
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new RuntimeException("Username is already taken: " + user.getUsername());
@@ -635,21 +1436,12 @@ public class UserServiceImpl implements UserService {
         if (user.getUserStatus() == null) {
             user.setUserStatus(UserStatus.WAITING);
         }
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
 
     @Override
-    public User login(String username, String password) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found."));
-
-        if (!user.getPassword().equals(password)) {
-            throw new RuntimeException("Invalid password.");
-        }
-        return user;
-    }
-
-    @Override
+    @Transactional
     public User updateUser(User user) {
         User existingUser = userRepository.findById(user.getId())
                 .orElseThrow(() -> new RuntimeException("User not found."));
@@ -661,20 +1453,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void changePassword(Long userId, String oldPassword, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found."));
 
-        if (!user.getPassword().equals(oldPassword)) {
-            throw new RuntimeException("Invalid old password.");
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new RuntimeException("invalid old password");
         }
 
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
 
-
     @Override
+    @Transactional
     public void deleteById(Long id) {
         userRepository.deleteById(id);
     }
@@ -729,5 +1522,23 @@ public class UserServiceImpl implements UserService {
         return userRepository.searchUsers(firstName, lastName, role, status);
     }
 
+    @Override
+    @Transactional
+    public void changeUserStatus(Long userId, UserStatus newStatus) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
+        user.setUserStatus(newStatus);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void changeUserRole(Long userId, Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setRole(newRole);
+        userRepository.save(user);
+    }
 }

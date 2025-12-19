@@ -33,7 +33,6 @@ public class User {
     @Column(nullable = false, unique = true)
     private String username;
     @NotBlank(message = "password cannot be empty")
-    @Size(min = 6, max = 20)
     private String password;
     @NotNull(message = "role cannot be empty")
     @Column(nullable = false)

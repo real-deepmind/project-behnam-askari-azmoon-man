@@ -17,6 +17,7 @@ import realdeepmind.service.user.UserService;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -141,5 +142,17 @@ public class UserController {
         );
 
         return ResponseEntity.ok("Password changed successfully.");
+    }
+    @PutMapping("/{id}/reset-password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> resetPassword(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String newPassword = body.get("newPassword");
+
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new RuntimeException("Password must be at least 6 characters");
+        }
+
+        userService.resetPassword(id, newPassword);
+        return ResponseEntity.ok("Password reset successfully.");
     }
 }

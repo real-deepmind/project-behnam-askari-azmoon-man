@@ -40,8 +40,8 @@ public interface UserRepository extends JpaRepository<User, Long> , JpaSpecifica
     List<User> findByFirstNameContainsIgnoreCaseAndLastNameContainingIgnoreCase(String firstName, String lastName);
 
     @Query("SELECT u FROM User u WHERE " +
-            "(:firstName IS NULL OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', :firstName, '%'))) AND " +
-            "(:lastName IS NULL OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :lastName, '%'))) AND " +
+            "(:firstName IS NULL OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', CAST(:firstName AS string), '%'))) AND " +
+            "(:lastName IS NULL OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', CAST(:lastName AS string), '%'))) AND " +
             "(:role IS NULL OR u.role = :role) AND " +
             "(:status IS NULL OR u.userStatus = :status)")
     List<User> searchUsers(@Param("firstName") String firstName,

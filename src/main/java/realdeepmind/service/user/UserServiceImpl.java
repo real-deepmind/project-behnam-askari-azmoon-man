@@ -1,6 +1,7 @@
 package realdeepmind.service.user;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import realdeepmind.entity.User;
@@ -17,8 +18,10 @@ import java.util.Optional;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
+    @Transactional
     public User signUp(User user) {
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new RuntimeException("Username is already taken: " + user.getUsername());
@@ -26,21 +29,12 @@ public class UserServiceImpl implements UserService {
         if (user.getUserStatus() == null) {
             user.setUserStatus(UserStatus.WAITING);
         }
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
 
     @Override
-    public User login(String username, String password) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found."));
-
-        if (!user.getPassword().equals(password)) {
-            throw new RuntimeException("Invalid password.");
-        }
-        return user;
-    }
-
-    @Override
+    @Transactional
     public User updateUser(User user) {
         User existingUser = userRepository.findById(user.getId())
                 .orElseThrow(() -> new RuntimeException("User not found."));
@@ -52,20 +46,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void changePassword(Long userId, String oldPassword, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found."));
 
-        if (!user.getPassword().equals(oldPassword)) {
-            throw new RuntimeException("Invalid old password.");
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new RuntimeException("invalid old password");
         }
 
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
 
-
     @Override
+    @Transactional
     public void deleteById(Long id) {
         userRepository.deleteById(id);
     }
@@ -121,6 +116,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void changeUserStatus(Long userId, UserStatus newStatus) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -130,6 +126,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public void changeUserRole(Long userId, Role newRole) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -138,5 +135,33 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
     }
 
+    @Override
+    @Transactional
+    public void changeUserStatus(Long userId, UserStatus newStatus, String reason) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (newStatus == UserStatus.REJECTED) {
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new RuntimeException("Rejection reason is required.");
+            }
+            user.setRejectionReason(reason);
+        } else {
+            user.setRejectionReason(null);
+        }
+
+        user.setUserStatus(newStatus);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+
+        userRepository.save(user);
+    }
 }

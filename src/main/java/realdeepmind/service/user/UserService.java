@@ -11,7 +11,6 @@ import java.util.Optional;
 public interface UserService {
     User signUp(User user);
 
-    User login(String username, String password);
 
     User updateUser(User user);
 
@@ -44,6 +43,10 @@ public interface UserService {
     void changeUserStatus(Long userId, UserStatus newStatus);
 
     public void changeUserRole(Long userId, Role newRole);
+
+    void changeUserStatus(Long userId, UserStatus newStatus, String reason);
+
+    public void resetPassword(Long userId, String newPassword);
 
 
 }
