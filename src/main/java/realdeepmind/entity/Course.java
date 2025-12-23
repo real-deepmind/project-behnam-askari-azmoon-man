@@ -38,5 +38,10 @@ public class Course {
     @ToString.Exclude
     @Builder.Default
     private List<CourseEnrollment> enrollments = new ArrayList<>();
+    @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    @ToString.Exclude
+    @Builder.Default
+    private List<Exam> exams = new ArrayList<>();
 
 }
