@@ -14,6 +14,8 @@ import java.util.Optional;
 public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollment, Long> {
     boolean existsByUserIdAndCourseId(Long userId, Long courseId);
 
+    boolean existsByUserIdAndCourseIdAndRoleInCourse(Long userId, Long courseId, RoleInCourse roleInCourse);
+
     Optional<CourseEnrollment> findByUserIdAndCourseId(Long userId, Long courseId);
 
     List<CourseEnrollment> findByUserId(Long userId);
