@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import realdeepmind.dto.course.CourseDto;
 import realdeepmind.dto.course.CourseResponseDto;
@@ -11,8 +13,10 @@ import realdeepmind.dto.course_enrollment.EnrollmentRequestDto;
 import realdeepmind.dto.course_enrollment.EnrollmentResponseDto;
 import realdeepmind.entity.Course;
 import realdeepmind.entity.CourseEnrollment;
+import realdeepmind.entity.enums.Role;
 import realdeepmind.mapper.CourseEnrollmentMapper;
 import realdeepmind.mapper.CourseMapper;
+import realdeepmind.security.CustomUserDetails;
 import realdeepmind.service.course.CourseService;
 import realdeepmind.service.course_enrollment.CourseEnrollmentService;
 
@@ -66,18 +70,45 @@ public class CourseController {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CourseResponseDto> updateCourse(@PathVariable Long id,@Valid @RequestBody CourseDto courseDto) {
+    public ResponseEntity<CourseResponseDto> updateCourse(@PathVariable Long id, @Valid @RequestBody CourseDto courseDto) {
         Course courseToUpdate = courseMapper.toEntity(courseDto);
         courseToUpdate.setId(id);
         Course updated = courseService.updateCourse(courseToUpdate);
         return ResponseEntity.ok(courseMapper.toDto(updated));
     }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> deleteCourse(@PathVariable Long id) {
         courseService.deleteCourse(id);
         return ResponseEntity.ok("Course deleted successfully.");
+    }
+
+    @GetMapping("/my-courses")
+    public ResponseEntity<List<CourseResponseDto>> getMyCourses() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+
+        Long userId = userDetails.getUser().getId();
+        Role userRole = userDetails.getUser().getRole();
+
+        List<Course> courses;
+
+        if (userRole == Role.TEACHER) {
+            courses = courseService.getCoursesByTeacher(userId);
+        } else if (userRole == Role.STUDENT) {
+            courses = courseService.getCoursesByStudent(userId);
+        } else {
+            courses = courseService.getAllCourses();
+        }
+
+        List<CourseResponseDto> dtos = courses.stream()
+                .map(courseMapper::toDto)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(dtos);
     }
 }
