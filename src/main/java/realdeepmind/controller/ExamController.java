@@ -50,6 +50,7 @@ public class ExamController {
     }
 
     @GetMapping("/course/{courseId}")
+    @PreAuthorize("@courseGuard.isEnrolledInCourse(#courseId)")
     public ResponseEntity<List<ExamResponseDto>> getExamsByCourse(@PathVariable Long courseId) {
         return ResponseEntity.ok(examService.getExamsByCourseId(courseId));
     }
