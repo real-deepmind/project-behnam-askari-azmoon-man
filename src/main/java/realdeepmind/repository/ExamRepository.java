@@ -19,5 +19,6 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
             "where en.user.id = :userId " +
             "order by e.startDate asc ")
     List<Exam> findAllExamsByUserId(@Param("userId") Long userId);
+    boolean existsByCourseId(Long courseId);
 
 }
