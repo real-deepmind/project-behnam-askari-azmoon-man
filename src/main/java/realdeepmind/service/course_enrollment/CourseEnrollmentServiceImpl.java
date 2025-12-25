@@ -24,6 +24,13 @@ public class CourseEnrollmentServiceImpl implements CourseEnrollmentService {
     private final UserRepository userRepository;
     private final CourseRepository courseRepository;
 
+
+    @Override
+    public boolean checkEnrollmentRole(Long userId, Long courseId, RoleInCourse role) {
+        return enrollmentRepository.existsByUserIdAndCourseIdAndRoleInCourse(userId, courseId, role);
+    }
+
+
     @Transactional
     @Override
     public CourseEnrollment enroll(Long userId, Long courseId, RoleInCourse role) {
