@@ -31,4 +31,5 @@ public interface CourseEnrollmentService {
     List<CourseEnrollment> findByCourseId(Long courseId);
 
     List<CourseEnrollment> searchEnrollments(Long courseId, Long userId, RoleInCourse role);
+    boolean checkEnrollmentRole(Long userId, Long courseId, RoleInCourse role);
 }
