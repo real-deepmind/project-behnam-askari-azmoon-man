@@ -60,7 +60,6 @@ public class ExamController {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
         Long currentUserId = userDetails.getUser().getId();
-
         return ResponseEntity.ok(examService.getAllExamsByUserId(currentUserId));
     }
 }
