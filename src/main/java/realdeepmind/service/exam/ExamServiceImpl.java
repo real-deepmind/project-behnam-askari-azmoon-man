@@ -7,6 +7,8 @@ import realdeepmind.dto.exam.ExamDto;
 import realdeepmind.dto.exam.ExamResponseDto;
 import realdeepmind.entity.Course;
 import realdeepmind.entity.Exam;
+import realdeepmind.exception.BadRequestException;
+import realdeepmind.exception.ResourceNotFoundException;
 import realdeepmind.mapper.ExamMapper;
 import realdeepmind.repository.CourseRepository;
 import realdeepmind.repository.ExamRepository;
@@ -26,12 +28,12 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public ExamResponseDto createExam(ExamDto examDto) {
         if (examRepository.existsByCourseId(examDto.getCourseId())) {
-            throw new RuntimeException("teacher only can create one exam for this course");
+            throw new BadRequestException("teacher only can create one exam for this course");
         }
         Exam exam = examMapper.toEntity(examDto);
 
         Course course = courseRepository.findById(examDto.getCourseId())
-                .orElseThrow(() -> new RuntimeException("course not find" + examDto.getCourseId()));
+                .orElseThrow(() -> new ResourceNotFoundException("course not find" + examDto.getCourseId()));
 
         exam.setCourse(course);
 
@@ -44,7 +46,7 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public ExamResponseDto updateExam(Long examId, ExamDto examDto) {
         Exam existingExam = examRepository.findById(examId)
-                .orElseThrow(() -> new RuntimeException("exam not find" + examId));
+                .orElseThrow(() -> new ResourceNotFoundException("exam not find" + examId));
 
         existingExam.setTitle(examDto.getTitle());
         existingExam.setDescription(examDto.getDescription());
@@ -53,7 +55,7 @@ public class ExamServiceImpl implements ExamService {
 
         if (!existingExam.getCourse().getId().equals(examDto.getCourseId())) {
             Course newCourse = courseRepository.findById(examDto.getCourseId())
-                    .orElseThrow(() -> new RuntimeException("new course not find"));
+                    .orElseThrow(() -> new ResourceNotFoundException("new course not find"));
             existingExam.setCourse(newCourse);
         }
 
@@ -65,7 +67,7 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public void deleteExam(Long examId) {
         if (!examRepository.existsById(examId)) {
-            throw new RuntimeException("exam not found " + examId);
+            throw new ResourceNotFoundException("exam not found " + examId);
         }
         examRepository.deleteById(examId);
     }
@@ -75,7 +77,7 @@ public class ExamServiceImpl implements ExamService {
     @Transactional(readOnly = true)
     public ExamResponseDto getExamById(Long examId) {
         Exam exam = examRepository.findById(examId)
-                .orElseThrow(() -> new RuntimeException("exam not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("exam not found"));
         return examMapper.toDto(exam);
     }
 
